@@ -196,18 +196,6 @@ class DetrParameters(Parameters):
         default=String("coco"),
         name="dataset_file", description="dataset_file"
     )
-    coco_path: String = Parameters.field(
-        default=String(""),
-        name="coco_path", description="coco_path"
-    )
-    coco_panoptic_path: Optional[String] = Parameters.field(
-        default=None,
-        name="coco_panoptic_path", description="coco_panoptic_path"
-    )
-    remove_difficult: Boolean = Parameters.field(
-        default=Boolean(False),
-        name="remove_difficult", description="remove_difficult"
-    )
     output_dir: String = Parameters.field(
         default=String(""),
         name="output_dir", description='path where to save, empty for no saving'
@@ -371,9 +359,8 @@ class DetrDataset(Dataset[DetrSamples, DetrAnnotations]):
         return len(self.ids)
 
 if __name__ == '__main__':
-    #args = DetrParameters(coco_path="/home/jovyan/work/coco", epochs=2)#train
-    args = DetrParameters(aux_loss=False, eval=True, resume="https://dl.fbaipublicfiles.com/detr/detr-r50-e632da11.pth", 
-                                    coco_path="/home/jovyan/work/coco")#eval
+    args = DetrParameters(epochs=2)#train
+    #args = DetrParameters(aux_loss=False, eval=True, resume="https://dl.fbaipublicfiles.com/detr/detr-r50-e632da11.pth")#eval
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
 
