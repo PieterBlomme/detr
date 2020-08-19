@@ -95,6 +95,7 @@ class DetrParameters(Parameters):
         name="Frozen weights", description="Path to the pretrained model. If set, only the mask head will be trained"
     )
     # model
+    #TODO check which backbones are possible
     backbone: String = Parameters.field(
         default=String("resnet50"),
         name="Backbone", description="Name of the convolutional backbone to us"
@@ -298,10 +299,8 @@ def main(args, dataset_train, dataset_val):
             args.start_epoch = checkpoint['epoch'] + 1
 
     if args.eval:
-        test_stats, coco_evaluator = evaluate(model, criterion, postprocessors,
+        test_stats = evaluate(model, criterion, postprocessors,
                                               data_loader_val, base_ds, device, args.output_dir)
-        if args.output_dir:
-            utils.save_on_master(coco_evaluator.coco_eval["bbox"].eval, output_dir / "eval.pth")
         return
 
     print("Start training")
@@ -325,7 +324,7 @@ def main(args, dataset_train, dataset_val):
                     'args': args,
                 }, checkpoint_path)
 
-        test_stats, coco_evaluator = evaluate(
+        test_stats = evaluate(
             model, criterion, postprocessors, data_loader_val, base_ds, device, args.output_dir
         )
 
@@ -337,17 +336,6 @@ def main(args, dataset_train, dataset_val):
         if args.output_dir and utils.is_main_process():
             with (output_dir / "log.txt").open("a") as f:
                 f.write(json.dumps(log_stats) + "\n")
-
-            # for evaluation logs
-            if coco_evaluator is not None:
-                (output_dir / 'eval').mkdir(exist_ok=True)
-                if "bbox" in coco_evaluator.coco_eval:
-                    filenames = ['latest.pth']
-                    if epoch % 50 == 0:
-                        filenames.append(f'{epoch:03}.pth')
-                    for name in filenames:
-                        torch.save(coco_evaluator.coco_eval["bbox"].eval,
-                                   output_dir / "eval" / name)
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
@@ -383,14 +371,15 @@ class DetrDataset(Dataset[DetrSamples, DetrAnnotations]):
         return len(self.ids)
 
 if __name__ == '__main__':
-    args = DetrParameters(coco_path="/home/jovyan/work/coco")#train
-    #args = DetrParameters(aux_loss=False, eval=True, resume="https://dl.fbaipublicfiles.com/detr/detr-r50-e632da11.pth", coco_path="/home/jovyan/work/coco")#eval
+    #args = DetrParameters(coco_path="/home/jovyan/work/coco", epochs=2)#train
+    args = DetrParameters(aux_loss=False, eval=True, resume="https://dl.fbaipublicfiles.com/detr/detr-r50-e632da11.pth", 
+                                    coco_path="/home/jovyan/work/coco")#eval
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
 
     coco = COCO('/home/jovyan/work/coco/annotations/instances_val2017.json')
-    train_ids = coco.getImgIds()[:500]
-    val_ids = coco.getImgIds()[500:600]
+    train_ids = coco.getImgIds()[:60]
+    val_ids = coco.getImgIds()[60:90]
 
     dataset_train = DetrDataset(coco, train_ids)
     dataset_val = DetrDataset(coco, val_ids)

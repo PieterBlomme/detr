@@ -42,11 +42,11 @@ class DatasetWrapper:
 
         img = PIL_Image.fromarray(sample.image)
         target = {}
-        cls_indexes = []
+        classes = []
         boxes = []
         for bounding_box in annotations.boxes:
             class_index = CLASSES.index(bounding_box.get_class().name)
-            cls_indexes.append(class_index)
+            classes.append(class_index)
             x1 = float(bounding_box.p1.x)
             y1 = float(bounding_box.p1.y)
             x2 = float(bounding_box.p2.x)
@@ -57,10 +57,19 @@ class DatasetWrapper:
         image_id = torch.tensor([image_id])
 
         w, h = img.size
+        boxes = torch.as_tensor(boxes, dtype=torch.float32).reshape(-1, 4)
+        boxes[:, 2:] += boxes[:, :2]
+        boxes[:, 0::2].clamp_(min=0, max=w)
+        boxes[:, 1::2].clamp_(min=0, max=h)
+        classes = torch.tensor(classes, dtype=torch.int64)
+
+        keep = (boxes[:, 3] > boxes[:, 1]) & (boxes[:, 2] > boxes[:, 0])
+        boxes = boxes[keep]
+        classes = classes[keep]
 
         target = {}
-        target['boxes'] = torch.as_tensor(boxes, dtype=torch.float32)
-        target['labels'] = torch.tensor(cls_indexes, dtype=torch.int64)
+        target['boxes'] = boxes
+        target['labels'] = classes
         target["orig_size"] = torch.as_tensor([int(h), int(w)])
         target["size"] = torch.as_tensor([int(h), int(w)])
         target["image_id"] = torch.tensor([image_id])
