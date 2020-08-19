@@ -63,6 +63,8 @@ from datasets import get_coco_api_from_dataset, build_dataset_rvai
 from engine import evaluate, train_one_epoch
 from models import build_model
 
+from .detr_helpers import get_model_dir
+
 @dataclass
 class DetrInputs(Inputs):
     image: Image = Inputs.field(name="Image", description="An image.")
@@ -225,10 +227,6 @@ class DetrParameters(Parameters):
         default=String("coco"),
         name="dataset_file", description="dataset_file"
     )
-    output_dir: String = Parameters.field(
-        default=String(""),
-        name="output_dir", description='path where to save, empty for no saving'
-    )
     seed: Integer = Parameters.field(
         default=Integer(42),
         name="seed", description="seed"
@@ -343,7 +341,7 @@ class DetrCell(TrainableCell):
             checkpoint = torch.load(args.frozen_weights, map_location='cpu')
             model_without_ddp.detr.load_state_dict(checkpoint['model'])
 
-        output_dir = Path(args.output_dir)
+        output_dir = Path(get_model_dir())
         if args.resume:
             if args.resume.startswith('https'):
                 checkpoint = torch.hub.load_state_dict_from_url(
@@ -363,22 +361,22 @@ class DetrCell(TrainableCell):
                 model, criterion, data_loader_train, optimizer, device, epoch,
                 args.clip_max_norm)
             lr_scheduler.step()
-            if args.output_dir:
-                checkpoint_paths = [output_dir / 'checkpoint.pth']
-                # extra checkpoint before LR drop and every 100 epochs
-                if (epoch + 1) % args.lr_drop == 0 or (epoch + 1) % 100 == 0:
-                    checkpoint_paths.append(output_dir / f'checkpoint{epoch:04}.pth')
-                for checkpoint_path in checkpoint_paths:
-                    utils.save_on_master({
-                        'model': model_without_ddp.state_dict(),
-                        'optimizer': optimizer.state_dict(),
-                        'lr_scheduler': lr_scheduler.state_dict(),
-                        'epoch': epoch,
-                        'args': args,
-                    }, checkpoint_path)
+            
+            checkpoint_paths = [output_dir / 'checkpoint.pth']
+            # extra checkpoint before LR drop and every 100 epochs
+            if (epoch + 1) % args.lr_drop == 0 or (epoch + 1) % 100 == 0:
+                checkpoint_paths.append(output_dir / f'checkpoint{epoch:04}.pth')
+            for checkpoint_path in checkpoint_paths:
+                utils.save_on_master({
+                    'model': model_without_ddp.state_dict(),
+                    'optimizer': optimizer.state_dict(),
+                    'lr_scheduler': lr_scheduler.state_dict(),
+                    'epoch': epoch,
+                    'args': args,
+                }, checkpoint_path)
 
             test_stats = evaluate(
-                model, criterion, postprocessors, data_loader_val, base_ds, device, args.output_dir
+                model, criterion, postprocessors, data_loader_val, base_ds, device, output_dir
             )
 
             log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
@@ -386,7 +384,7 @@ class DetrCell(TrainableCell):
                         'epoch': epoch,
                         'n_parameters': n_parameters}
 
-            if args.output_dir and utils.is_main_process():
+            if utils.is_main_process():
                 with (output_dir / "log.txt").open("a") as f:
                     f.write(json.dumps(log_stats) + "\n")
 
@@ -444,7 +442,7 @@ class DetrCell(TrainableCell):
             checkpoint = torch.load(args.frozen_weights, map_location='cpu')
             model_without_ddp.detr.load_state_dict(checkpoint['model'])
 
-        output_dir = Path(args.output_dir)
+        output_dir = Path(get_model_dir())
         if args.resume:
             if args.resume.startswith('https'):
                 checkpoint = torch.hub.load_state_dict_from_url(
@@ -454,7 +452,7 @@ class DetrCell(TrainableCell):
             model_without_ddp.load_state_dict(checkpoint['model'])
 
         test_stats = evaluate(model, criterion, postprocessors,
-                                                data_loader_test, base_ds, device, args.output_dir)
+                                                data_loader_test, base_ds, device, output_dir)
         return MyMetrics()
 
     @classmethod
