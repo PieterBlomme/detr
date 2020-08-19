@@ -385,7 +385,7 @@ class DetrCell(TrainableCell):
             if utils.is_main_process():
                 with (output_dir / "log.txt").open("a") as f:
                     f.write(json.dumps(log_stats) + "\n")
-
+        return checkpoint_path
 
     @classmethod
     def test(
