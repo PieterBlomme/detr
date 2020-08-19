@@ -49,6 +49,7 @@ import datetime
 import json
 import random
 import time
+import shutil
 from pathlib import Path
 from torch.utils.data import DataLoader, DistributedSampler
 
@@ -63,7 +64,7 @@ from datasets import get_coco_api_from_dataset, build_dataset_rvai
 from engine import evaluate, train_one_epoch
 from models import build_model
 
-from .detr_helpers import get_model_dir
+from .detr_helpers import get_model_dir, clear_folder
 
 @dataclass
 class DetrInputs(Inputs):
@@ -342,6 +343,7 @@ class DetrCell(TrainableCell):
             model_without_ddp.detr.load_state_dict(checkpoint['model'])
 
         output_dir = Path(get_model_dir())
+        clear_folder(output_dir)
         if args.resume:
             if args.resume.startswith('https'):
                 checkpoint = torch.hub.load_state_dict_from_url(
@@ -362,12 +364,9 @@ class DetrCell(TrainableCell):
                 args.clip_max_norm)
             lr_scheduler.step()
             
-            checkpoint_paths = [output_dir / 'checkpoint.pth']
-            # extra checkpoint before LR drop and every 100 epochs
-            if (epoch + 1) % args.lr_drop == 0 or (epoch + 1) % 100 == 0:
-                checkpoint_paths.append(output_dir / f'checkpoint{epoch:04}.pth')
-            for checkpoint_path in checkpoint_paths:
-                utils.save_on_master({
+            # save every epoch
+            checkpoint_path = output_dir / f'checkpoint{epoch:04}.pth'
+            utils.save_on_master({
                     'model': model_without_ddp.state_dict(),
                     'optimizer': optimizer.state_dict(),
                     'lr_scheduler': lr_scheduler.state_dict(),
