@@ -410,24 +410,9 @@ class DetrCell(TrainableCell):
         model.to(device)
 
         model_without_ddp = model
-        n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        print('number of params:', n_parameters)
-
-        param_dicts = [
-            {"params": [p for n, p in model_without_ddp.named_parameters() if "backbone" not in n and p.requires_grad]},
-            {
-                "params": [p for n, p in model_without_ddp.named_parameters() if "backbone" in n and p.requires_grad],
-                "lr": args.lr_backbone,
-            },
-        ]
-        optimizer = torch.optim.AdamW(param_dicts, lr=args.lr,
-                                    weight_decay=args.weight_decay)
-        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop)
 
         test_dataset = build_dataset_rvai(test_dataset, image_set='val', args=args)
-        
         sampler_test = torch.utils.data.SequentialSampler(test_dataset)
-
         data_loader_test = DataLoader(test_dataset, args.batch_size, sampler=sampler_test,
                                     drop_last=False, collate_fn=utils.collate_fn, num_workers=1)
 
