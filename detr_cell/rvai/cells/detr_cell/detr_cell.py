@@ -274,7 +274,20 @@ class DetrCell(TrainableCell):
         """Load a serialized model from disk."""
         # TODO: implement
         ...
-        return None, None
+        args = parameters #TODO
+        if args.frozen_weights is not None:
+            assert args.masks, "Frozen training is meant for segmentation only"
+
+        # fix the seed for reproducibility
+        seed = args.seed + utils.get_rank()
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        random.seed(seed)
+
+        model, criterion, postprocessors = build_model(args)
+
+        model = (model, criterion, postprocessors)
+        return model, None
 
     @classmethod
     def train(
@@ -289,18 +302,9 @@ class DetrCell(TrainableCell):
     ) -> TrainingSession[MyMetrics]:
         """Train a predictive model on annotated data."""
         args = parameters #TODO
-        if args.frozen_weights is not None:
-            assert args.masks, "Frozen training is meant for segmentation only"
-
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-        # fix the seed for reproducibility
-        seed = args.seed + utils.get_rank()
-        torch.manual_seed(seed)
-        np.random.seed(seed)
-        random.seed(seed)
-
-        model, criterion, postprocessors = build_model(args)
+        model, criterion, postprocessors = model
         model.to(device)
 
         model_without_ddp = model
@@ -355,11 +359,6 @@ class DetrCell(TrainableCell):
                 optimizer.load_state_dict(checkpoint['optimizer'])
                 lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
                 args.start_epoch = checkpoint['epoch'] + 1
-
-        if args.eval:
-            test_stats = evaluate(model, criterion, postprocessors,
-                                                data_loader_val, base_ds, device, args.output_dir)
-            return
 
         print("Start training")
         start_time = time.time()
