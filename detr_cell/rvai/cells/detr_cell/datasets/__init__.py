@@ -2,7 +2,7 @@
 import torch.utils.data
 import torchvision
 
-from .coco import build as build_coco
+#from .coco import build as build_coco
 from .coco_rvai import build as build_coco_rvai
 
 
