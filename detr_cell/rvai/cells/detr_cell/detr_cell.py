@@ -241,10 +241,6 @@ class DetrParameters(Parameters):
         default=Integer(0),
         name="start_epoch", description="start_epoch"
     )
-    eval: Boolean = Parameters.field(
-        default=Boolean(False),
-        name="eval", description="eval"
-    )
 
 
 @dataclass
