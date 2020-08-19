@@ -351,7 +351,7 @@ class DetrCell(TrainableCell):
             else:
                 checkpoint = torch.load(args.resume, map_location='cpu')
             model_without_ddp.load_state_dict(checkpoint['model'])
-            if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
+            if 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
                 optimizer.load_state_dict(checkpoint['optimizer'])
                 lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
                 args.start_epoch = checkpoint['epoch'] + 1
@@ -452,10 +452,6 @@ class DetrCell(TrainableCell):
             else:
                 checkpoint = torch.load(args.resume, map_location='cpu')
             model_without_ddp.load_state_dict(checkpoint['model'])
-            if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
-                optimizer.load_state_dict(checkpoint['optimizer'])
-                lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
-                args.start_epoch = checkpoint['epoch'] + 1
 
         test_stats = evaluate(model, criterion, postprocessors,
                                                 data_loader_test, base_ds, device, args.output_dir)
