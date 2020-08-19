@@ -12,16 +12,53 @@ from torch.utils.data import DataLoader, DistributedSampler
 
 import datasets
 import util.misc as utils
-from datasets import build_dataset, get_coco_api_from_dataset
+from datasets import build_dataset, get_coco_api_from_dataset, build_dataset_rvai
 from engine import evaluate, train_one_epoch
 from models import build_model
 
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 from rvai.base.cell import Parameters
-from rvai.types import Float, Integer, String, Boolean, Enum
+from rvai.types import (
+    Boolean,
+    BoundingBox,
+    Class,
+    Enum,
+    Float,
+    Image,
+    Integer,
+    List,
+    Point,
+    String,
+)
+from rvai.base.data import (
+    Annotations,
+    Dataset,
+    Inputs,
+    Outputs,
+    Parameters,
+    Samples,
+)
 
-# Parameters
+@dataclass
+class DetrInputs(Inputs):
+    image: Image = Inputs.field(name="Image", description="An image.")
+
+@dataclass
+class DetrOutputs(Outputs):
+    boxes: List[BoundingBox] = Annotations.field(
+        name="Bounding Boxes", description="A list of object bounding boxes.",
+    )
+
+@dataclass
+class DetrSamples(DetrInputs, Samples):
+    pass
+
+
+@dataclass
+class DetrAnnotations(DetrOutputs, Annotations):
+    pass
+
 @dataclass
 class DetrParameters(Parameters):
     # learning
@@ -191,7 +228,7 @@ class DetrParameters(Parameters):
         name="eval", description="eval"
     )
 
-def main(args):
+def main(args, dataset_train, dataset_val):
     if args.frozen_weights is not None:
         assert args.masks, "Frozen training is meant for segmentation only"
     print(args)
@@ -222,8 +259,8 @@ def main(args):
                                   weight_decay=args.weight_decay)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop)
 
-    dataset_train = build_dataset(image_set='train', args=args)
-    dataset_val = build_dataset(image_set='val', args=args)
+    dataset_train = build_dataset_rvai(dataset_train, image_set='train', args=args)
+    dataset_val = build_dataset_rvai(dataset_val, image_set='val', args=args)
     
     sampler_train = torch.utils.data.RandomSampler(dataset_train)
     sampler_val = torch.utils.data.SequentialSampler(dataset_val)
@@ -317,9 +354,45 @@ def main(args):
     print('Training time {}'.format(total_time_str))
 
 
+#Temp create dataset
+from pycocotools.coco import COCO
+import cv2
+class DetrDataset(Dataset[DetrSamples, DetrAnnotations]):
+    def __init__(self, coco, ids):
+        self.coco = coco
+        self.ids = ids
+
+    def get_ann(self, ann):
+        x1, y1, w, h = ann['bbox']
+        x2, y2 = x1+w, y1+h
+        cat = coco.loadCats([ann['category_id']])[0]['name']
+        
+        bbox = BoundingBox(Point(x=x1, y=y1), Point(x=x2, y=y2))
+        bbox.set_class(Class(class_uuid=cat, name=cat))
+        return bbox
+
+    def __getitem__(self, index) -> Tuple[DetrSamples, DetrAnnotations]:
+        filename = coco.loadImgs(self.ids[index])[0]['file_name']
+        img = cv2.imread(f'/home/jovyan/work/coco/val2017/{filename}')
+        
+        ann_ids = coco.getAnnIds(imgIds=self.ids[index])
+        boxes = [self.get_ann(ann) for ann in coco.loadAnns(ann_ids)]
+        return DetrSamples(image=Image(img)), DetrAnnotations(boxes=boxes)
+
+    def __len__(self):
+        return len(self.ids)
+
 if __name__ == '__main__':
-    #args = DetrParameters(coco_path="/home/jovyan/work/coco")#train
-    args = DetrParameters(aux_loss=False, eval=True, resume="https://dl.fbaipublicfiles.com/detr/detr-r50-e632da11.pth", coco_path="/home/jovyan/work/coco")#eval
+    args = DetrParameters(coco_path="/home/jovyan/work/coco")#train
+    #args = DetrParameters(aux_loss=False, eval=True, resume="https://dl.fbaipublicfiles.com/detr/detr-r50-e632da11.pth", coco_path="/home/jovyan/work/coco")#eval
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
-    main(args)
+
+    coco = COCO('/home/jovyan/work/coco/annotations/instances_val2017.json')
+    train_ids = coco.getImgIds()[:500]
+    val_ids = coco.getImgIds()[500:600]
+
+    dataset_train = DetrDataset(coco, train_ids)
+    dataset_val = DetrDataset(coco, val_ids)
+        
+    main(args, dataset_train=dataset_train, dataset_val=dataset_val)
