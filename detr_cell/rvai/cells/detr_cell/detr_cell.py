@@ -228,10 +228,6 @@ class DetrParameters(Parameters):
         default=String("coco"),
         name="dataset_file", description="dataset_file"
     )
-    seed: Integer = Parameters.field(
-        default=Integer(42),
-        name="seed", description="seed"
-    )
     resume: String = Parameters.field(
         default=String("https://dl.fbaipublicfiles.com/detr/detr-r50-e632da11.pth"),
         name="resume", description='resume from checkpoint'
@@ -272,12 +268,6 @@ class DetrCell(TrainableCell):
         args = parameters #TODO
         if args.frozen_weights is not None:
             assert args.masks, "Frozen training is meant for segmentation only"
-
-        # fix the seed for reproducibility
-        seed = args.seed + utils.get_rank()
-        torch.manual_seed(seed)
-        np.random.seed(seed)
-        random.seed(seed)
 
         model, criterion, postprocessors = build_model(args)
 
