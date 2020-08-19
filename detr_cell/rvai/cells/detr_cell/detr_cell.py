@@ -398,8 +398,6 @@ class DetrCell(TrainableCell):
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
         print('Training time {}'.format(total_time_str))
 
-    # =========================================================================
-    # Optional: TrainableCell.test
     @classmethod
     def test(
         cls,
@@ -410,16 +408,62 @@ class DetrCell(TrainableCell):
         test_dataset: Dataset[DetrSamples, DetrAnnotations],
         dataset_config: Optional[DatasetConfig],
     ) -> TestSession[MyMetrics]:
-        """Test the performance of a predictive model on new, unseen, data.
+        """Test the performance of a predictive model on new, unseen, data."""
+        args = parameters #TODO
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-        This method is optional and can be removed if the algorithm doesn't
-        support testing on a test dataset.
-        """
-        # TODO: implement
-        # return MyMetrics(accuracy=Float(0.99))
-        ...
+        model, criterion, postprocessors = model
+        model.to(device)
 
-    # =========================================================================
+        model_without_ddp = model
+        n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        print('number of params:', n_parameters)
+
+        param_dicts = [
+            {"params": [p for n, p in model_without_ddp.named_parameters() if "backbone" not in n and p.requires_grad]},
+            {
+                "params": [p for n, p in model_without_ddp.named_parameters() if "backbone" in n and p.requires_grad],
+                "lr": args.lr_backbone,
+            },
+        ]
+        optimizer = torch.optim.AdamW(param_dicts, lr=args.lr,
+                                    weight_decay=args.weight_decay)
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop)
+
+        test_dataset = build_dataset_rvai(test_dataset, image_set='val', args=args)
+        
+        sampler_test = torch.utils.data.SequentialSampler(test_dataset)
+
+        data_loader_test = DataLoader(test_dataset, args.batch_size, sampler=sampler_test,
+                                    drop_last=False, collate_fn=utils.collate_fn, num_workers=1)
+
+        if args.dataset_file == "coco_panoptic":
+            # We also evaluate AP during panoptic training, on original coco DS
+            coco_val = datasets.coco.build("val", args)
+            base_ds = get_coco_api_from_dataset(coco_val)
+        else:
+            base_ds = get_coco_api_from_dataset(test_dataset)
+
+        if args.frozen_weights is not None:
+            checkpoint = torch.load(args.frozen_weights, map_location='cpu')
+            model_without_ddp.detr.load_state_dict(checkpoint['model'])
+
+        output_dir = Path(args.output_dir)
+        if args.resume:
+            if args.resume.startswith('https'):
+                checkpoint = torch.hub.load_state_dict_from_url(
+                    args.resume, map_location='cpu', check_hash=True)
+            else:
+                checkpoint = torch.load(args.resume, map_location='cpu')
+            model_without_ddp.load_state_dict(checkpoint['model'])
+            if not args.eval and 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
+                optimizer.load_state_dict(checkpoint['optimizer'])
+                lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
+                args.start_epoch = checkpoint['epoch'] + 1
+
+        test_stats = evaluate(model, criterion, postprocessors,
+                                                data_loader_test, base_ds, device, args.output_dir)
+        return MyMetrics()
 
     @classmethod
     def predict(
