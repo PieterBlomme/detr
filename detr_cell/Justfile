@@ -1,0 +1,50 @@
+
+_help:
+	just --list
+
+# remove all build, test, coverage and Python artifacts
+clean: clean-build clean-pyc clean-test
+
+# remove build artifacts
+clean-build:
+	rm -fr build/
+	rm -fr dist/
+	rm -fr .eggs/
+	find . -name '*.egg-info' -exec rm -fr {} +
+	find . -name '*.egg' -exec rm -f {} +
+
+# remove Python file artifacts
+clean-pyc:
+	find . -name '*.pyc' -exec rm -f {} +
+	find . -name '*.pyo' -exec rm -f {} +
+	find . -name '*~' -exec rm -f {} +
+	find . -name '__pycache__' -exec rm -fr {} +
+
+# remove test and coverage artifacts
+clean-test:
+	rm -fr .tox/
+	rm -f .coverage
+	rm -fr htmlcov/
+	rm -fr .pytest_cache
+
+# check style with black
+lint:
+	autoflake --remove-all-unused-imports --recursive --remove-unused-variables --in-place .
+	isort --multi-line=3 --trailing-comma --force-grid-wrap=0 --combine-as --line-width 79 --recursive --apply -p rvai .
+	black --line-length 79 rvai tests
+
+# typecheck
+check:
+	mypy ./rvai
+
+# run tests with pytest
+test +FLAGS='':
+	pytest {{FLAGS}}
+
+# run tests on every Python version with tox
+test-all: #
+	tox
+
+# install the package to the active Python's site-packages
+install: clean
+	python setup.py install

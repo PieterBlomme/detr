@@ -1,0 +1,18 @@
+test-DetrCell-cell:
+    only:
+        changes:
+            - "cells/detr_cell/**/*"
+    stage: test
+    # image from tools/sdk_base_docker/Dockerfile
+    image: 192.10.1.100:5000/rvai_sdk_base:0.3.0
+    variables:
+        PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+    before_script:
+        - pip install tox==3.14.0
+        - cd cells/detr_cell
+    script:
+        - tox
+    cache:
+        key: ${CI_COMMIT_REF_SLUG}
+        paths:
+            - .cache/pip
