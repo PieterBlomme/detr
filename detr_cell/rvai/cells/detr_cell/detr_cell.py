@@ -357,7 +357,6 @@ class DetrCell(TrainableCell):
                 args.start_epoch = checkpoint['epoch'] + 1
 
         print("Start training")
-        start_time = time.time()
         for epoch in range(args.start_epoch, args.epochs):
             train_stats = train_one_epoch(
                 model, criterion, data_loader_train, optimizer, device, epoch,
@@ -387,9 +386,6 @@ class DetrCell(TrainableCell):
                 with (output_dir / "log.txt").open("a") as f:
                     f.write(json.dumps(log_stats) + "\n")
 
-        total_time = time.time() - start_time
-        total_time_str = str(datetime.timedelta(seconds=int(total_time)))
-        print('Training time {}'.format(total_time_str))
 
     @classmethod
     def test(
