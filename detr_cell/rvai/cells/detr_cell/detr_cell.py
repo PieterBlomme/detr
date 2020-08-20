@@ -33,6 +33,7 @@ from rvai.types import (
     BoundingBox,
     Class,
     Classes,
+    Dict,
     Enum,
     Float,
     Image,
@@ -249,6 +250,10 @@ class MyMetrics(Metrics):
     # )
     pass
 
+@dataclass
+class ModelConfig:
+    class_to_index: Dict[Class, int]
+    index_to_class: Dict[int, Class]
 
 @cell
 class DetrCell(TrainableCell):
@@ -268,7 +273,18 @@ class DetrCell(TrainableCell):
         model, criterion, postprocessors = build_model(parameters)
 
         model = (model, criterion, postprocessors)
-        return model, None
+
+        class_to_idx, idx_to_class = parameters.classes.class_index_mapping()
+
+
+        return (
+            model,
+            ModelConfig(
+                class_to_index=class_to_idx,
+                index_to_class=idx_to_class,
+            ),
+        )
+
 
     @classmethod
     def train(
@@ -302,8 +318,8 @@ class DetrCell(TrainableCell):
                                     weight_decay=parameters.weight_decay)
         lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, parameters.lr_drop)
 
-        train_dataset = build_dataset_rvai(train_dataset, image_set='train', args=parameters)
-        validation_dataset = build_dataset_rvai(validation_dataset, image_set='val', args=parameters)
+        train_dataset = build_dataset_rvai(train_dataset, class_to_index=model_config.class_to_index, image_set='train', args=parameters)
+        validation_dataset = build_dataset_rvai(validation_dataset, class_to_index=model_config.class_to_index, image_set='val', args=parameters)
         
         sampler_train = torch.utils.data.RandomSampler(train_dataset)
         sampler_val = torch.utils.data.SequentialSampler(validation_dataset)
@@ -390,7 +406,7 @@ class DetrCell(TrainableCell):
 
         model_without_ddp = model
 
-        test_dataset = build_dataset_rvai(test_dataset, image_set='val', args=parameters)
+        test_dataset = build_dataset_rvai(test_dataset, class_to_index=model_config.class_to_index, image_set='val', args=parameters)
         sampler_test = torch.utils.data.SequentialSampler(test_dataset)
         data_loader_test = DataLoader(test_dataset, parameters.batch_size, sampler=sampler_test,
                                     drop_last=False, collate_fn=utils.collate_fn, num_workers=1)

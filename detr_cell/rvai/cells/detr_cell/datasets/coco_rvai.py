@@ -14,38 +14,21 @@ from PIL import Image as PIL_Image
 
 import datasets.transforms as T
 
-#TODO class to index
-CLASSES = [
-    'N/A', 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
-    'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'N/A',
-    'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse',
-    'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'N/A', 'backpack',
-    'umbrella', 'N/A', 'N/A', 'handbag', 'tie', 'suitcase', 'frisbee', 'skis',
-    'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove',
-    'skateboard', 'surfboard', 'tennis racket', 'bottle', 'N/A', 'wine glass',
-    'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich',
-    'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake',
-    'chair', 'couch', 'potted plant', 'bed', 'N/A', 'dining table', 'N/A',
-    'N/A', 'toilet', 'N/A', 'tv', 'laptop', 'mouse', 'remote', 'keyboard',
-    'cell phone', 'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'N/A',
-    'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier',
-    'toothbrush'
-]
-
 class DatasetWrapper:
-    def __init__(self, dataset, transforms, return_masks):
-        self.dataset = dataset
+    def __init__(self, dataset, class_to_index, transforms, return_masks):
+        self._dataset = dataset
         self._transforms = transforms
+        self._class_to_index = class_to_index
 
     def __getitem__(self, idx):
-        sample, annotations = self.dataset.__getitem__(idx)
+        sample, annotations = self._dataset.__getitem__(idx)
 
         img = PIL_Image.fromarray(sample.image)
         target = {}
         classes = []
         boxes = []
         for bounding_box in annotations.boxes:
-            class_index = CLASSES.index(bounding_box.get_class().name)
+            class_index = self._class_to_index[bounding_box.get_class()]
             classes.append(class_index)
             x1 = float(bounding_box.p1.x)
             y1 = float(bounding_box.p1.y)
@@ -79,7 +62,7 @@ class DatasetWrapper:
         return img, target
 
     def __len__(self):
-        return self.dataset.__len__()
+        return self._dataset.__len__()
 
 def make_coco_transforms(image_set):
 
@@ -113,5 +96,5 @@ def make_coco_transforms(image_set):
     raise ValueError(f'unknown {image_set}')
 
 
-def build(dataset, image_set, args):
-    return DatasetWrapper(dataset, transforms=make_coco_transforms(image_set), return_masks=args.masks)
+def build(dataset, class_to_index, image_set, args):
+    return DatasetWrapper(dataset, class_to_index=class_to_index, transforms=make_coco_transforms(image_set), return_masks=args.masks)

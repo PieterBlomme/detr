@@ -25,6 +25,6 @@ def build_dataset(image_set, args):
         return build_coco_panoptic(image_set, args)
     raise ValueError(f'dataset {args.dataset_file} not supported')
 
-def build_dataset_rvai(dataset, image_set, args):
+def build_dataset_rvai(dataset, class_to_index, image_set, args):
     if args.dataset_file == 'coco':
-        return build_coco_rvai(dataset, image_set, args)
+        return build_coco_rvai(dataset, class_to_index, image_set, args)
