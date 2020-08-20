@@ -252,7 +252,6 @@ class MyMetrics(Metrics):
 
 @cell
 class DetrCell(TrainableCell):
-    #TODO ProcessedParameters to set output_dir to temp local
 
     @classmethod
     def load_model(
