@@ -74,7 +74,6 @@ class DatasetWrapper:
         target["size"] = torch.as_tensor([int(h), int(w)])
         target["image_id"] = torch.tensor([image_id])
 
-        #img, target = self.prepare(img, target)#TODO: remove...
         if self._transforms is not None:
             img, target = self._transforms(img, target)
         return img, target
