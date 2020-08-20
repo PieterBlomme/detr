@@ -262,13 +262,10 @@ class DetrCell(TrainableCell):
         dataset_config: Optional[DatasetConfig],
     ) -> Tuple[Model, ModelConfig]:
         """Load a serialized model from disk."""
-        # TODO: implement
-        ...
-        args = parameters #TODO
-        if args.frozen_weights is not None:
-            assert args.masks, "Frozen training is meant for segmentation only"
+        if parameters.frozen_weights is not None:
+            assert parameters.masks, "Frozen training is meant for segmentation only"
 
-        model, criterion, postprocessors = build_model(args)
+        model, criterion, postprocessors = build_model(parameters)
 
         model = (model, criterion, postprocessors)
         return model, None
@@ -285,7 +282,6 @@ class DetrCell(TrainableCell):
         dataset_config: Optional[DatasetConfig],
     ) -> TrainingSession[MyMetrics]:
         """Train a predictive model on annotated data."""
-        args = parameters #TODO
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
         model, criterion, postprocessors = model
@@ -299,57 +295,57 @@ class DetrCell(TrainableCell):
             {"params": [p for n, p in model_without_ddp.named_parameters() if "backbone" not in n and p.requires_grad]},
             {
                 "params": [p for n, p in model_without_ddp.named_parameters() if "backbone" in n and p.requires_grad],
-                "lr": args.lr_backbone,
+                "lr": parameters.lr_backbone,
             },
         ]
-        optimizer = torch.optim.AdamW(param_dicts, lr=args.lr,
-                                    weight_decay=args.weight_decay)
-        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop)
+        optimizer = torch.optim.AdamW(param_dicts, lr=parameters.lr,
+                                    weight_decay=parameters.weight_decay)
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, parameters.lr_drop)
 
-        train_dataset = build_dataset_rvai(train_dataset, image_set='train', args=args)
-        validation_dataset = build_dataset_rvai(validation_dataset, image_set='val', args=args)
+        train_dataset = build_dataset_rvai(train_dataset, image_set='train', args=parameters)
+        validation_dataset = build_dataset_rvai(validation_dataset, image_set='val', args=parameters)
         
         sampler_train = torch.utils.data.RandomSampler(train_dataset)
         sampler_val = torch.utils.data.SequentialSampler(validation_dataset)
 
         batch_sampler_train = torch.utils.data.BatchSampler(
-            sampler_train, args.batch_size, drop_last=True)
+            sampler_train, parameters.batch_size, drop_last=True)
 
         data_loader_train = DataLoader(train_dataset, batch_sampler=batch_sampler_train,
                                     collate_fn=utils.collate_fn, num_workers=1)
-        data_loader_val = DataLoader(validation_dataset, args.batch_size, sampler=sampler_val,
+        data_loader_val = DataLoader(validation_dataset, parameters.batch_size, sampler=sampler_val,
                                     drop_last=False, collate_fn=utils.collate_fn, num_workers=1)
 
-        if args.dataset_file == "coco_panoptic":
+        if parameters.dataset_file == "coco_panoptic":
             # We also evaluate AP during panoptic training, on original coco DS
-            coco_val = datasets.coco.build("val", args)
+            coco_val = datasets.coco.build("val", parameters)
             base_ds = get_coco_api_from_dataset(coco_val)
         else:
             base_ds = get_coco_api_from_dataset(validation_dataset)
 
-        if args.frozen_weights is not None:
-            checkpoint = torch.load(args.frozen_weights, map_location='cpu')
+        if parameters.frozen_weights is not None:
+            checkpoint = torch.load(parameters.frozen_weights, map_location='cpu')
             model_without_ddp.detr.load_state_dict(checkpoint['model'])
 
         output_dir = Path(get_model_dir())
         clear_folder(output_dir)
-        if args.resume:
-            if args.resume.startswith('https'):
+        if parameters.resume:
+            if parameters.resume.startswith('https'):
                 checkpoint = torch.hub.load_state_dict_from_url(
-                    args.resume, map_location='cpu', check_hash=True)
+                    parameters.resume, map_location='cpu', check_hash=True)
             else:
-                checkpoint = torch.load(args.resume, map_location='cpu')
+                checkpoint = torch.load(parameters.resume, map_location='cpu')
             model_without_ddp.load_state_dict(checkpoint['model'])
             if 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
                 optimizer.load_state_dict(checkpoint['optimizer'])
                 lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
-                args.start_epoch = checkpoint['epoch'] + 1
+                parameters.start_epoch = checkpoint['epoch'] + 1
 
         print("Start training")
-        for epoch in range(args.start_epoch, args.epochs):
+        for epoch in range(parameters.start_epoch, parameters.epochs):
             train_stats = train_one_epoch(
                 model, criterion, data_loader_train, optimizer, device, epoch,
-                args.clip_max_norm)
+                parameters.clip_max_norm)
             lr_scheduler.step()
             
             # save every epoch
@@ -359,7 +355,7 @@ class DetrCell(TrainableCell):
                     'optimizer': optimizer.state_dict(),
                     'lr_scheduler': lr_scheduler.state_dict(),
                     'epoch': epoch,
-                    'args': args,
+                    'args': parameters,
                 }, checkpoint_path)
 
             test_stats = evaluate(
@@ -387,7 +383,6 @@ class DetrCell(TrainableCell):
         dataset_config: Optional[DatasetConfig],
     ) -> TestSession[MyMetrics]:
         """Test the performance of a predictive model on new, unseen, data."""
-        args = parameters #TODO
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
         model, criterion, postprocessors = model
@@ -395,29 +390,29 @@ class DetrCell(TrainableCell):
 
         model_without_ddp = model
 
-        test_dataset = build_dataset_rvai(test_dataset, image_set='val', args=args)
+        test_dataset = build_dataset_rvai(test_dataset, image_set='val', args=parameters)
         sampler_test = torch.utils.data.SequentialSampler(test_dataset)
-        data_loader_test = DataLoader(test_dataset, args.batch_size, sampler=sampler_test,
+        data_loader_test = DataLoader(test_dataset, parameters.batch_size, sampler=sampler_test,
                                     drop_last=False, collate_fn=utils.collate_fn, num_workers=1)
 
-        if args.dataset_file == "coco_panoptic":
+        if parameters.dataset_file == "coco_panoptic":
             # We also evaluate AP during panoptic training, on original coco DS
-            coco_val = datasets.coco.build("val", args)
+            coco_val = datasets.coco.build("val", parameters)
             base_ds = get_coco_api_from_dataset(coco_val)
         else:
             base_ds = get_coco_api_from_dataset(test_dataset)
 
-        if args.frozen_weights is not None:
-            checkpoint = torch.load(args.frozen_weights, map_location='cpu')
+        if parameters.frozen_weights is not None:
+            checkpoint = torch.load(parameters.frozen_weights, map_location='cpu')
             model_without_ddp.detr.load_state_dict(checkpoint['model'])
 
         output_dir = Path(get_model_dir())
-        if args.resume:
-            if args.resume.startswith('https'):
+        if parameters.resume:
+            if parameters.resume.startswith('https'):
                 checkpoint = torch.hub.load_state_dict_from_url(
-                    args.resume, map_location='cpu', check_hash=True)
+                    parameters.resume, map_location='cpu', check_hash=True)
             else:
-                checkpoint = torch.load(args.resume, map_location='cpu')
+                checkpoint = torch.load(parameters.resume, map_location='cpu')
             model_without_ddp.load_state_dict(checkpoint['model'])
 
         test_stats = evaluate(model, criterion, postprocessors,
