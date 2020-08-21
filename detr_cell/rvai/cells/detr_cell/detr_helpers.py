@@ -48,16 +48,13 @@ def _compute_ap(recall, precision):
     return ap
 
 def convert_detections(detections, classes, keep_prob=0.7):
-    # keep only predictions with 0.7+ confidence
-    #TODO dynamic threshold 
-    probas = detections['pred_logits'].softmax(-1)[:, :, :-1].numpy()
-    # convert boxes from [0; 1] to image scales
-    # TODO im.size should be dynamic .
-    bboxes_scaled = rescale_bboxes(detections['pred_boxes'], (704,576)).numpy()
-
     #detections should be list of dictionaries
     all_detections = []
-    for p, b in zip(probas, bboxes_scaled):
+    for d in detections:
+        # keep only predictions with 0.7+ confidence
+        #TODO dynamic threshold 
+        p = d['scores'].softmax(-1).numpy()
+        b = d['boxes'].numpy()
         keep = np.max(p, -1) > keep_prob
         p = p[keep]
         b = b[keep]
@@ -85,22 +82,6 @@ def convert_annotations(annotations, classes):
             a[label] = np.reshape(a[label], (-1, 4))
         all_annotations.append(a)
     return all_annotations
-
-# for output bounding box post-processing
-def box_cxcywh_to_xyxy(x):
-    x_c, y_c, w, h = x.unbind(1)
-    b = [(x_c - 0.5 * w), (y_c - 0.5 * h),
-         (x_c + 0.5 * w), (y_c + 0.5 * h)]
-    return torch.stack(b, dim=1)
-
-def rescale_bboxes(out_bboxes, size):
-    final_b = []
-    for out_bbox in out_bboxes:
-        img_w, img_h = size
-        b = box_cxcywh_to_xyxy(out_bbox)
-        b = b * torch.tensor([img_w, img_h, img_w, img_h], dtype=torch.float32)
-        final_b.append(b)
-    return torch.stack(final_b, dim=0)
 
 def calculate_map(annotations, outputs, classes):
     all_detections = convert_detections(outputs, classes)

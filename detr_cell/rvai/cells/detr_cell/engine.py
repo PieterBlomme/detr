@@ -83,7 +83,8 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, out
             data_loader.dataset.ann_folder,
             output_dir=os.path.join(output_dir, "panoptic_eval"),
         )
-
+    all_targets = []
+    all_results = []
     for samples, targets in metric_logger.log_every(data_loader, 10, header):
         samples = samples.to(device)
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
@@ -105,6 +106,7 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, out
 
         orig_target_sizes = torch.stack([t["orig_size"] for t in targets], dim=0)
         results = postprocessors['bbox'](outputs, orig_target_sizes)
+
         if 'segm' in postprocessors.keys():
             target_sizes = torch.stack([t["size"] for t in targets], dim=0)
             results = postprocessors['segm'](results, outputs, orig_target_sizes, target_sizes)
@@ -119,9 +121,17 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, out
                 res_pano[i]["file_name"] = file_name
 
             panoptic_evaluator.update(res_pano)
-            
+        
+        all_targets.extend(targets)
+        all_results.extend(results)
+
+    print(len(all_targets))
+    print(len(all_results))
+    average_precisions = calculate_map(all_targets, all_results, classes=classes)
+
     #TODO instead of only last batch, calculate for all batches
-    average_precisions = calculate_map(targets, outputs, classes=classes)
+    
+    print(average_precisions)
     total_instances = []
     precisions = []
 
