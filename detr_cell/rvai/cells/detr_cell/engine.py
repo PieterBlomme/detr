@@ -14,6 +14,7 @@ from datasets.panoptic_eval import PanopticEvaluator
 from detr_helpers import calculate_map
 import logging
 
+PRINT_FREQ = -1
 
 def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
@@ -24,9 +25,8 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
     metric_logger.add_meter('class_error', utils.SmoothedValue(window_size=1, fmt='{value:.2f}'))
     header = 'Epoch: [{}]'.format(epoch)
-    print_freq = 10
 
-    for samples, targets in metric_logger.log_every(data_loader, print_freq, header):
+    for samples, targets in metric_logger.log_every(data_loader, PRINT_FREQ, header):
         samples = samples.to(device)
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
@@ -85,7 +85,7 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, out
         )
     all_targets = []
     all_results = []
-    for samples, targets in metric_logger.log_every(data_loader, 10, header):
+    for samples, targets in metric_logger.log_every(data_loader, PRINT_FREQ, header):
         samples = samples.to(device)
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
@@ -125,13 +125,10 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, out
         all_targets.extend(targets)
         all_results.extend(results)
 
-    print(len(all_targets))
-    print(len(all_results))
     average_precisions = calculate_map(all_targets, all_results, classes=classes)
 
     #TODO instead of only last batch, calculate for all batches
     
-    print(average_precisions)
     total_instances = []
     precisions = []
 
