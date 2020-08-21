@@ -11,6 +11,8 @@ import torch
 
 import util.misc as utils
 from datasets.panoptic_eval import PanopticEvaluator
+from detr_helpers import calculate_map
+import logging
 
 
 def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
@@ -64,7 +66,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
 
 @torch.no_grad()
-def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, output_dir):
+def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, output_dir, classes):
     model.eval()
     criterion.eval()
 
@@ -117,6 +119,20 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, out
                 res_pano[i]["file_name"] = file_name
 
             panoptic_evaluator.update(res_pano)
+            
+    #TODO instead of only last batch, calculate for all batches
+    average_precisions = calculate_map(targets, outputs, classes=classes)
+    total_instances = []
+    precisions = []
+
+    for label, (avg_prec, num_annotations) in average_precisions.items():
+        total_instances.append(num_annotations)
+        precisions.append(avg_prec)
+
+    logging.debug(f"Test dataset precisions: {precisions}")
+    logging.debug(f"Test dataset instances: {total_instances}")
+    mAP = sum(precisions) / (sum(x > 0 for x in total_instances) + 0.00001)
+
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
@@ -133,4 +149,7 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, out
         stats['PQ_all'] = panoptic_res["All"]
         stats['PQ_th'] = panoptic_res["Things"]
         stats['PQ_st'] = panoptic_res["Stuff"]
-    return stats
+
+
+    
+    return stats, mAP

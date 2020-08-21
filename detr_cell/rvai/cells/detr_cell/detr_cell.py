@@ -240,15 +240,11 @@ class DetrParameters(Parameters):
 
 
 @dataclass
-class MyMetrics(Metrics):
-    # TODO: describe the TrainableCell's metric types
-    # accuracy: Float = Metrics.field(
-    #     name="Accuracy",
-    #     short_name="acc",
-    #     description="Accuracy",
-    #     performance=True # mark as main performance metric
-    # )
-    pass
+class DetrMetrics(Metrics):
+    mAP: Float = Metrics.field(
+        name="Mean average precision", short_name="mAP", performance=True
+    )
+
 
 @dataclass
 class ModelConfig:
@@ -266,6 +262,7 @@ class DetrCell(TrainableCell):
         model_path: Optional[ModelPath],
         dataset_config: Optional[DatasetConfig],
     ) -> Tuple[Model, ModelConfig]:
+    #TODO load pretrained ...
         """Load a serialized model from disk."""
         if parameters.frozen_weights is not None:
             assert parameters.masks, "Frozen training is meant for segmentation only"
@@ -296,7 +293,7 @@ class DetrCell(TrainableCell):
         train_dataset: Dataset[DetrSamples, DetrAnnotations],
         validation_dataset: Dataset[DetrSamples, DetrAnnotations],
         dataset_config: Optional[DatasetConfig],
-    ) -> TrainingSession[MyMetrics]:
+    ) -> TrainingSession[DetrMetrics]:
         """Train a predictive model on annotated data."""
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -375,7 +372,7 @@ class DetrCell(TrainableCell):
                 }, checkpoint_path)
 
             test_stats = evaluate(
-                model, criterion, postprocessors, data_loader_val, base_ds, device, output_dir
+                model, criterion, postprocessors, data_loader_val, base_ds, device, output_dir, parameters.classes
             )
 
             log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
@@ -397,7 +394,7 @@ class DetrCell(TrainableCell):
         model_config: ModelConfig,
         test_dataset: Dataset[DetrSamples, DetrAnnotations],
         dataset_config: Optional[DatasetConfig],
-    ) -> TestSession[MyMetrics]:
+    ) -> TestSession[DetrMetrics]:
         """Test the performance of a predictive model on new, unseen, data."""
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -431,9 +428,9 @@ class DetrCell(TrainableCell):
                 checkpoint = torch.load(parameters.resume, map_location='cpu')
             model_without_ddp.load_state_dict(checkpoint['model'])
 
-        test_stats = evaluate(model, criterion, postprocessors,
-                                                data_loader_test, base_ds, device, output_dir)
-        return MyMetrics()
+        test_stats, mAP = evaluate(model, criterion, postprocessors,
+                                                data_loader_test, base_ds, device, output_dir, parameters.classes)
+        return DetrMetrics(mAP = Float(mAP))
 
     @classmethod
     def predict(
