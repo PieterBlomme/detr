@@ -371,7 +371,7 @@ class DetrCell(TrainableCell):
                     'args': parameters,
                 }, checkpoint_path)
 
-            test_stats = evaluate(
+            test_stats, mAP = evaluate(
                 model, criterion, postprocessors, data_loader_val, base_ds, device, output_dir, parameters.classes
             )
 
