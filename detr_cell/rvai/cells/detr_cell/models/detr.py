@@ -303,7 +303,7 @@ class MLP(nn.Module):
 
 def build(args):
     #TODO output classes (needs dynamic load state dict)
-    num_classes = 20 if args.dataset_file != 'coco' else 91
+    num_classes = len(args.classes) #20 if args.dataset_file != 'coco' else 91
     if args.dataset_file == "coco_panoptic":
         num_classes = 250
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
