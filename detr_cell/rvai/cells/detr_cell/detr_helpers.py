@@ -53,11 +53,15 @@ def convert_detections(detections, classes, keep_prob=0.7):
     for d in detections:
         # keep only predictions with 0.7+ confidence
         #TODO dynamic threshold 
-        p = d['scores'].softmax(-1).numpy()
+        #TODO threshold seems incorrect, since with softmax higher than 0.7 can only happen for one slot?...
+        #print(d['scores'].softmax(-1).numpy())
+        #print(d['scores'].numpy())
+        p = d['scores'].numpy()
         b = d['boxes'].numpy()
-        keep = np.max(p, -1) > keep_prob
+        keep = p > keep_prob
         p = p[keep]
         b = b[keep]
+        print(f'Number of outputs after threshold filter: {p.shape}')
         d = {}
         for label in range(len(classes)):
             d[label] = np.array([])
@@ -83,10 +87,12 @@ def convert_annotations(annotations, classes):
         all_annotations.append(a)
     return all_annotations
 
-def calculate_map(annotations, outputs, classes):
+def calculate_map(targets, outputs, classes):
+    #TODO somethings wrong cause the annotation counts are not correct
     all_detections = convert_detections(outputs, classes)
-    all_annotations = convert_annotations(annotations, classes)
+    all_annotations = convert_annotations(targets, classes)
     average_precisions = {}
+
     # loop over all classes
     for label in range(len(classes)):
 
@@ -98,7 +104,7 @@ def calculate_map(annotations, outputs, classes):
         num_annotations = 0.0
 
         #loop over all annotations
-        for i in range(len(annotations)):
+        for i in range(len(targets)):
             detections           = all_detections[i][label]
             annotations          = all_annotations[i][label]
             num_annotations      += annotations.shape[0]
@@ -145,4 +151,5 @@ def calculate_map(annotations, outputs, classes):
         # compute average precision
         average_precision  = _compute_ap(recall, precision)
         average_precisions[label] = average_precision, num_annotations
+
     return average_precisions
