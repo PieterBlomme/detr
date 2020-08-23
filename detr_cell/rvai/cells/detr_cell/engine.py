@@ -121,13 +121,11 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, out
                 res_pano[i]["file_name"] = file_name
 
             panoptic_evaluator.update(res_pano)
-        
-        all_targets.extend(targets)
+
+        all_targets.extend(targets)        
         all_results.extend(results)
 
     average_precisions = calculate_map(all_targets, all_results, classes=classes)
-
-    #TODO instead of only last batch, calculate for all batches
     
     total_instances = []
     precisions = []
@@ -136,9 +134,10 @@ def evaluate(model, criterion, postprocessors, data_loader, base_ds, device, out
         total_instances.append(num_annotations)
         precisions.append(avg_prec)
 
-    logging.debug(f"Test dataset precisions: {precisions}")
-    logging.debug(f"Test dataset instances: {total_instances}")
+    print(f"Test dataset precisions: {precisions}")
+    print(f"Test dataset instances: {total_instances}")
     mAP = sum(precisions) / (sum(x > 0 for x in total_instances) + 0.00001)
+    print(f"mAP: {mAP}")
 
 
     # gather the stats from all processes
