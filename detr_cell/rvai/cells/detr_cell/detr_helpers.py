@@ -52,27 +52,35 @@ def convert_detections(detections, classes, keep_prob=0.7):
     all_detections = []
     for d in detections:
         # keep only predictions with 0.7+ confidence
-        #TODO dynamic threshold 
-        #TODO threshold seems incorrect, since with softmax higher than 0.7 can only happen for one slot?...
+        #TODO dynamic threshold is it even needed?
         #print(d['scores'].softmax(-1).numpy())
         #print(d['scores'].numpy())
         p = d['scores'].numpy()
+        #print(f'max prob is {np.max(p)}')
         b = d['boxes'].numpy()
-        keep = p > keep_prob
-        p = p[keep]
-        b = b[keep]
-        print(f'Number of outputs after threshold filter: {p.shape}')
+        l = d['labels'].numpy()
+        #keep = p > keep_prob
+        #p = p[keep]
+        #b = b[keep]
+        #l = l[keep]
+        #print(f'Number of outputs after threshold filter: {l.shape}')
         d = {}
         for label in range(len(classes)):
             d[label] = np.array([])
-        for p2, b2 in zip(p,b):
-            label = np.argmax(p2)
-            values = np.append(b2, p2[label])
+        for p2, l2, b2 in zip(p,l,b):
+            label = l2
+            values = np.append(b2, p2)
             d[label] = np.append(d[label], [values])
         for label in range(len(classes)):
             d[label] = np.reshape(d[label], (-1, 5))
         all_detections.append(d)
     return all_detections
+
+def box_cxcywh_to_xyxy(x):
+    x_c, y_c, w, h = x
+    b = [(x_c - 0.5 * w), (y_c - 0.5 * h),
+         (x_c + 0.5 * w), (y_c + 0.5 * h)]
+    return b
 
 def convert_annotations(annotations, classes):
     all_annotations = []
@@ -80,15 +88,58 @@ def convert_annotations(annotations, classes):
         a = {}
         for label in range(len(classes)):
             a[label] = np.array([])
+        size = ann['orig_size'].numpy()
         for b, l in zip(ann['boxes'].numpy(), ann['labels'].numpy()):
-            a[l] = np.append(a[l], [b])
+            box = box_cxcywh_to_xyxy(b)
+            img_h, img_w = size
+            scale_fct = [img_w, img_h, img_w, img_h]
+            box = np.multiply(box, scale_fct)   
+
+            a[l] = np.append(a[l], [box])
         for label in range(len(classes)):
             a[label] = np.reshape(a[label], (-1, 4))
         all_annotations.append(a)
     return all_annotations
 
+def compute_overlap(
+    boxes,
+    query_boxes
+):
+    """
+    Args
+        a: (N, 4) ndarray of float
+        b: (K, 4) ndarray of float
+    Returns
+        overlaps: (N, K) ndarray of overlap between boxes and query_boxes
+    """
+    N = boxes.shape[0]
+    K = query_boxes.shape[0]
+    overlaps = np.zeros((N, K), dtype=np.float64)
+    for k in range(K):
+        box_area = (
+            (query_boxes[k, 2] - query_boxes[k, 0]) *
+            (query_boxes[k, 3] - query_boxes[k, 1])
+        )
+        for n in range(N):
+            iw = (
+                min(boxes[n, 2], query_boxes[k, 2]) -
+                max(boxes[n, 0], query_boxes[k, 0]) 
+            )
+            if iw > 0:
+                ih = (
+                    min(boxes[n, 3], query_boxes[k, 3]) -
+                    max(boxes[n, 1], query_boxes[k, 1]) 
+                )
+                if ih > 0:
+                    ua = np.float64(
+                        (boxes[n, 2] - boxes[n, 0]) *
+                        (boxes[n, 3] - boxes[n, 1]) +
+                        box_area - iw * ih
+                    )
+                    overlaps[n, k] = iw * ih / ua
+    return overlaps
+
 def calculate_map(targets, outputs, classes):
-    #TODO somethings wrong cause the annotation counts are not correct
     all_detections = convert_detections(outputs, classes)
     all_annotations = convert_annotations(targets, classes)
     average_precisions = {}
@@ -117,12 +168,11 @@ def calculate_map(targets, outputs, classes):
                     false_positives = np.append(false_positives, 1)
                     true_positives  = np.append(true_positives, 0)
                     continue
-
+                
                 overlaps            = compute_overlap(np.expand_dims(d, axis=0), annotations)
                 assigned_annotation = np.argmax(overlaps, axis=1)
                 max_overlap         = overlaps[0, assigned_annotation]
-
-                if max_overlap >= iou_threshold and assigned_annotation not in detected_annotations:
+                if max_overlap >= 0.5 and assigned_annotation not in detected_annotations: #TODO iou_threshold
                     false_positives = np.append(false_positives, 0)
                     true_positives  = np.append(true_positives, 1)
                     detected_annotations.append(assigned_annotation)
@@ -137,6 +187,7 @@ def calculate_map(targets, outputs, classes):
 
         # sort by score
         indices         = np.argsort(-scores)
+        #false_positives = [x for y, x in sorted(zip(indices, false_positives))]
         false_positives = false_positives[indices]
         true_positives  = true_positives[indices]
 
